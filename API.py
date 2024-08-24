@@ -10,6 +10,7 @@ class XTB:
         self.PSW = PSW
         self.ws = 0
         self.exec_start = self.get_time()
+        self.last_request = self.get_time()
         self.connect()
         self.login()
 
@@ -560,10 +561,23 @@ class XTB:
             return False
 
     def send(self, msg):
+        #check the minimal 200ms delay between requests
+        while True:
+            temp1 = self.last_request
+            temp2 = self.get_time()
+            temp = temp2 - temp1
+            temp = temp.total_seconds()
+            temp = float(temp)
+            if temp>=0.2:
+                break
+
         if msg["command"]!="login":
             self.is_on()
         msg_json = json.dumps(msg)
         self.ws.send(msg_json)
+
+        self.last_request = self.get_time()
+
         result = self.ws.recv()+"\n"
         result = json.loads(result)
         return result

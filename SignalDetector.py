@@ -1,5 +1,7 @@
 import pandas as pd
 import numpy as np
+from enum import Enum
+from Order import ORDER_TYPE
 
 class Indicator:
     def isEngulfing(self, data):
@@ -170,35 +172,37 @@ class Indicator:
         bandwidth = (upper_band - lower_band) / upper_band
         return bandwidth.iloc[-1] < 0.05
 
+class SIGNAL_TYPE(Enum):
+    OPEN = 0
+    CLOSE = 2
+
 class Signal:
-    def __init__(self, type, volume=0):
-        self.type = type
+    def __init__(self, ORDER_TYPE, signal_type, volume=0):
+        self.cmd = ORDER_TYPE
+        self.type = signal_type
         self.volume = volume
 
 class SignalDetector:
     def __init__(self):
-        self.signal = None
-        self.currency_infos = None
-        self.balance = None
         self.indicator = Indicator()
 
-    def calculate_trade_volume(self, risk_percentage=1):
+    def calculate_trade_volume(self, balance, symbolInfos, risk_percentage=1):
         """
         Calculate the trade volume based on the balance, leverage, and risk management.
         """
         risk_amount = self.balance * (risk_percentage / 100)
-        pip_value = (self.currency_infos['tickValue'] * self.currency_infos['contractSize']) / self.currency_infos['leverage']
+        pip_value = (self.symbolInfos['tickValue'] * self.symbolInfos['contractSize']) / self.symbolInfos['leverage']
         
         # Assuming a pip move equals tickSize, calculate volume to risk a certain amount
-        volume = risk_amount / (pip_value * self.currency_infos['tickSize'])
+        volume = risk_amount / (pip_value * self.symbolInfos['tickSize'])
         
         # Ensure volume respects broker's min, max, and step constraints
-        volume = max(min(volume, self.currency_infos['lotMax']), self.currency_infos['lotMin'])
-        volume = round(volume / self.currency_infos['lotStep']) * self.currency_infos['lotStep']
+        volume = max(min(volume, self.symbolInfos['lotMax']), self.symbolInfos['lotMin'])
+        volume = round(volume / self.symbolInfos['lotStep']) * self.symbolInfos['lotStep']
         
         return volume
 
-    def check_enterTrade_signal(self, data):
+    def check_enterTrade_signal(self, data, balance, symbolInfos):
         df = pd.DataFrame(data)
         
         # Calculate indicators
@@ -214,7 +218,7 @@ class SignalDetector:
         long_ma = self.indicator.calculate_moving_average(df, period=200)
 
         # Determine the volume for the trade
-        volume = self.calculate_trade_volume()
+        volume = self.calculate_trade_volume(balance, symbolInfos)
 
         # Buy Conditions
         if self.indicator.bullish_engulfing(data):
@@ -223,28 +227,28 @@ class SignalDetector:
                 supertrend2.iloc[-1] > supertrend2.iloc[-2] and
                 supertrend3.iloc[-1] > supertrend3.iloc[-2]
             ):
-                self.signal = Signal("buy", volume)
-                return self.signal
+                return Signal(ORDER_TYPE.BUY,  SIGNAL_TYPE.OPEN, volume)
+                
 
         if rsi.iloc[-1] < 30:  # RSI oversold
-            self.signal = Signal("buy", volume)
-            return self.signal
+            return Signal(ORDER_TYPE.BUY,  SIGNAL_TYPE.OPEN, volume)
+            
         
         if macd.iloc[-1] > signal.iloc[-1]:  # MACD bullish crossover
-            self.signal = Signal("buy", volume)
-            return self.signal
+            return Signal(ORDER_TYPE.BUY,  SIGNAL_TYPE.OPEN, volume)
+            
 
         if df['close'].iloc[-1] < lower_band.iloc[-1]:  # Price below Bollinger Band
-            self.signal = Signal("buy", volume)
-            return self.signal
+            return Signal(ORDER_TYPE.BUY,  SIGNAL_TYPE.OPEN, volume)
+            
 
         if df['close'].iloc[-1] > tenkan_sen.iloc[-1] and df['close'].iloc[-1] > kijun_sen.iloc[-1]:  # Ichimoku Cloud bullish signal
-            self.signal = Signal("buy", volume)
-            return self.signal
+            return Signal(ORDER_TYPE.BUY,  SIGNAL_TYPE.OPEN, volume)
+            
 
         if df['close'].iloc[-1] > sar.iloc[-1]:  # Parabolic SAR buy signal
-            self.signal = Signal("buy", volume)
-            return self.signal
+            return Signal(ORDER_TYPE.BUY,  SIGNAL_TYPE.OPEN, volume)
+            
 
         # Sell Conditions
         if self.indicator.bearish_engulfing(data):
@@ -253,68 +257,67 @@ class SignalDetector:
                 supertrend2.iloc[-1] < supertrend2.iloc[-2] and
                 supertrend3.iloc[-1] < supertrend3.iloc[-2]
             ):
-                self.signal = Signal("sell", volume)
-                return self.signal
+                return Signal(ORDER_TYPE.SELL,  SIGNAL_TYPE.OPEN, volume)
+                
 
         if rsi.iloc[-1] > 70:  # RSI overbought
-            self.signal = Signal("sell", volume)
-            return self.signal
+            return Signal(ORDER_TYPE.SELL,  SIGNAL_TYPE.OPEN, volume)
+            
 
         if macd.iloc[-1] < signal.iloc[-1]:  # MACD bearish crossover
-            self.signal = Signal("sell", volume)
-            return self.signal
+            return Signal(ORDER_TYPE.SELL,  SIGNAL_TYPE.OPEN, volume)
+            
 
         if df['close'].iloc[-1] > upper_band.iloc[-1]:  # Price above Bollinger Band
-            self.signal = Signal("sell", volume)
-            return self.signal
+            return Signal(ORDER_TYPE.SELL,  SIGNAL_TYPE.OPEN, volume)
+            
 
         if df['close'].iloc[-1] < tenkan_sen.iloc[-1] and df['close'].iloc[-1] < kijun_sen.iloc[-1]:  # Ichimoku Cloud bearish signal
-            self.signal = Signal("sell", volume)
-            return self.signal
+            return Signal(ORDER_TYPE.SELL,  SIGNAL_TYPE.OPEN, volume)
+            
 
         if df['close'].iloc[-1] < sar.iloc[-1]:  # Parabolic SAR sell signal
-            self.signal = Signal("sell", volume)
-            return self.signal
+            return Signal(ORDER_TYPE.SELL,  SIGNAL_TYPE.OPEN, volume)
+            
         
         # Golden Cross / Death Cross
         if self.indicator.detect_golden_cross(short_ma, long_ma):
-            self.signal = Signal("buy", volume)
-            return self.signal
+            return Signal(ORDER_TYPE.BUY,  SIGNAL_TYPE.OPEN, volume)
+            
         if self.indicator.detect_death_cross(short_ma, long_ma):
-            self.signal = Signal("sell", volume)
-            return self.signal
+            return Signal(ORDER_TYPE.SELL,  SIGNAL_TYPE.OPEN, volume)
+            
 
         # RSI Divergence
         bullish_divergence, bearish_divergence = self.indicator.detect_rsi_divergence(df, rsi)
         if bullish_divergence:
-            self.signal = Signal("buy", volume)
-            return self.signal
+            return Signal(ORDER_TYPE.BUY,  SIGNAL_TYPE.OPEN, volume)
+            
         if bearish_divergence:
-            self.signal = Signal("sell", volume)
-            return self.signal
+            return Signal(ORDER_TYPE.SELL,  SIGNAL_TYPE.OPEN, volume)
+            
 
         # Breakout Trading
         breakout_up, breakout_down = self.indicator.detect_price_breakout(df)
         if breakout_up:
-            self.signal = Signal("buy", volume)
-            return self.signal
+            return Signal(ORDER_TYPE.BUY,  SIGNAL_TYPE.OPEN, volume)
+            
         if breakout_down:
-            self.signal = Signal("sell", volume)
-            return self.signal
+            return Signal(ORDER_TYPE.SELL,  SIGNAL_TYPE.OPEN, volume)
+            
 
         # Bollinger Bands Squeeze
         if self.indicator.detect_bollinger_squeeze(upper_band, lower_band):
             if breakout_up:
-                self.signal = Signal("buy", volume)
-                return self.signal
+                return Signal(ORDER_TYPE.BUY,  SIGNAL_TYPE.OPEN, volume)
+                
             if breakout_down:
-                self.signal = Signal("sell", volume)
-                return self.signal
+                return Signal(ORDER_TYPE.SELL,  SIGNAL_TYPE.OPEN, volume)
+                
 
-        self.signal = Signal("None")
-        return self.signal
+        return None
 
-    def check_exitTrade_signal(self, data):
+    def check_exitTrade_signal(self, data, order):
         df = pd.DataFrame(data)
 
         # Calculate indicators
@@ -332,112 +335,108 @@ class SignalDetector:
 
         current_price = df['close'].iloc[-1]
 
-        # Determine the volume for the exit trade
-        volume = self.calculate_trade_volume()
-
         # Exit conditions for buy signals
-        if self.signal.type == "buy":
+        if order.type == ORDER_TYPE.BUY:
             # Supertrend exit
             if (
                 supertrend1.iloc[-1] < supertrend1.iloc[-2] or
                 supertrend2.iloc[-1] < supertrend2.iloc[-2] or
                 supertrend3.iloc[-1] < supertrend3.iloc[-2]
             ):
-                self.signal = Signal("exit", volume)
-                return self.signal
+                return Signal(order.type,  SIGNAL_TYPE.CLOSE, order.volume)
+                
 
             # RSI Overbought
             if rsi.iloc[-1] > 70:
-                self.signal = Signal("exit", volume)
-                return self.signal
+                return Signal(order.type,  SIGNAL_TYPE.CLOSE, order.volume)
+                
 
             # MACD Bearish Crossover
             if macd.iloc[-1] < signal.iloc[-1]:
-                self.signal = Signal("exit", volume)
-                return self.signal
+                return Signal(order.type,  SIGNAL_TYPE.CLOSE, order.volume)
+                
 
             # Price above Bollinger Upper Band
             if df['close'].iloc[-1] > upper_band.iloc[-1]:
-                self.signal = Signal("exit", volume)
-                return self.signal
+                return Signal(order.type,  SIGNAL_TYPE.CLOSE, order.volume)
+                
 
             # Ichimoku Cloud Bearish Signal
             if df['close'].iloc[-1] < tenkan_sen.iloc[-1] and df['close'].iloc[-1] < kijun_sen.iloc[-1]:
-                self.signal = Signal("exit", volume)
-                return self.signal
+                return Signal(order.type,  SIGNAL_TYPE.CLOSE, order.volume)
+                
 
             # Parabolic SAR sell signal
             if df['close'].iloc[-1] < sar.iloc[-1]:
-                self.signal = Signal("exit", volume)
-                return self.signal
+                return Signal(order.type,  SIGNAL_TYPE.CLOSE, order.volume)
+                
 
             # Moving Average Exit (Price crosses below short-term MA)
             if df['close'].iloc[-1] < short_ma.iloc[-1]:
-                self.signal = Signal("exit", volume)
-                return self.signal
+                return Signal(order.type,  SIGNAL_TYPE.CLOSE, order.volume)
+                
 
             # ATR-Based Exit (Trailing Stop)
             if self.entry_price and current_price < self.entry_price - 2 * atr.iloc[-1]:
-                self.signal = Signal("exit", volume)
-                return self.signal
+                return Signal(order.type,  SIGNAL_TYPE.CLOSE, order.volume)
+                
 
             # Fibonacci Extensions Exit (when price reaches Fibonacci extension levels)
             fib_levels = self.indicator.calculate_fibonacci_levels(df)
             if current_price >= fib_levels['100%']:  # Target reached
-                self.signal = Signal("exit", volume)
-                return self.signal
+                return Signal(order.type,  SIGNAL_TYPE.CLOSE, order.volume)
+                
 
         # Exit conditions for sell signals
-        if self.signal.type == "sell":
+        if order.type == ORDER_TYPE.SELL:
             # Supertrend exit
             if (
                 supertrend1.iloc[-1] > supertrend1.iloc[-2] or
                 supertrend2.iloc[-1] > supertrend2.iloc[-2] or
                 supertrend3.iloc[-1] > supertrend3.iloc[-2]
             ):
-                self.signal = Signal("exit", volume)
-                return self.signal
+                return Signal(order.type,  SIGNAL_TYPE.CLOSE, order.volume)
+                
 
             # RSI Oversold
             if rsi.iloc[-1] < 30:
-                self.signal = Signal("exit", volume)
-                return self.signal
+                return Signal(order.type,  SIGNAL_TYPE.CLOSE, order.volume)
+                
 
             # MACD Bullish Crossover
             if macd.iloc[-1] > signal.iloc[-1]:
-                self.signal = Signal("exit", volume)
-                return self.signal
+                return Signal(order.type,  SIGNAL_TYPE.CLOSE, order.volume)
+                
 
             # Price below Bollinger Lower Band
             if df['close'].iloc[-1] < lower_band.iloc[-1]:
-                self.signal = Signal("exit", volume)
-                return self.signal
+                return Signal(order.type,  SIGNAL_TYPE.CLOSE, order.volume)
+                
 
             # Ichimoku Cloud Bullish Signal
             if df['close'].iloc[-1] > tenkan_sen.iloc[-1] and df['close'].iloc[-1] > kijun_sen.iloc[-1]:
-                self.signal = Signal("exit", volume)
-                return self.signal
+                return Signal(order.type,  SIGNAL_TYPE.CLOSE, order.volume)
+                
 
             # Parabolic SAR buy signal
             if df['close'].iloc[-1] > sar.iloc[-1]:
-                self.signal = Signal("exit", volume)
-                return self.signal
+                return Signal(order.type,  SIGNAL_TYPE.CLOSE, order.volume)
+                
 
             # Moving Average Exit (Price crosses above short-term MA)
             if df['close'].iloc[-1] > short_ma.iloc[-1]:
-                self.signal = Signal("exit", volume)
-                return self.signal
+                return Signal(order.type,  SIGNAL_TYPE.CLOSE, order.volume)
+                
 
             # ATR-Based Exit (Trailing Stop)
             if self.entry_price and current_price > self.entry_price + 2 * atr.iloc[-1]:
-                self.signal = Signal("exit", volume)
-                return self.signal
+                return Signal(order.type,  SIGNAL_TYPE.CLOSE, order.volume)
+                
 
             # Fibonacci Extensions Exit (when price retraces after hitting an extension level)
             fib_levels = self.indicator.calculate_fibonacci_levels(df)
             if current_price <= fib_levels['100%']:  # Target reached
-                self.signal = Signal("exit", volume)
-                return self.signal
+                return Signal(order.type,  SIGNAL_TYPE.CLOSE, order.volume)
+                
 
-        self.signal = Signal("None")
-        return self.signal
+        return None
