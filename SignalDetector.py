@@ -186,21 +186,36 @@ class SignalDetector:
     def __init__(self):
         self.indicator = Indicator()
 
-    def calculate_trade_volume(self, balance, symbolInfos, risk_percentage=1):
+    def calculate_trade_volume(balance, symbolInfos, risk_percentage=1):
         """
         Calculate the trade volume based on the balance, leverage, and risk management.
+        The balance is in EUR, and we use the lotMinMargin field from symbolInfos.
+        The function also ensures that the balance is sufficient for the calculated volume.
         """
-        risk_amount = self.balance * (risk_percentage / 100)
-        pip_value = (self.symbolInfos['tickValue'] * self.symbolInfos['contractSize']) / self.symbolInfos['leverage']
-        
-        # Assuming a pip move equals tickSize, calculate volume to risk a certain amount
-        volume = risk_amount / (pip_value * self.symbolInfos['tickSize'])
-        
+        # Calculate the amount of money we are willing to risk
+        risk_amount = balance * (risk_percentage / 100)
+
+        # Use the lotMinMargin directly from the symbolInfos
+        lot_min_margin = symbolInfos['lotMinMargin']
+
+        # Calculate the initial volume based on the risk amount and minimum lot margin
+        volume = (risk_amount / lot_min_margin) * symbolInfos['lotMin']
+
         # Ensure volume respects broker's min, max, and step constraints
-        volume = max(min(volume, self.symbolInfos['lotMax']), self.symbolInfos['lotMin'])
-        volume = round(volume / self.symbolInfos['lotStep']) * self.symbolInfos['lotStep']
-        
+        volume = max(min(volume, symbolInfos['lotMax']), symbolInfos['lotMin'])
+        volume = round(volume / symbolInfos['lotStep']) * symbolInfos['lotStep']
+
+        # Check if the calculated volume requires more margin than available in the balance
+        required_margin = volume * lot_min_margin / symbolInfos['lotMin']
+        if required_margin > balance:
+            # If the required margin exceeds the balance, adjust the volume downwards
+            volume = (balance / lot_min_margin) * symbolInfos['lotMin']
+            volume = max(min(volume, symbolInfos['lotMax']), symbolInfos['lotMin'])
+            volume = round(volume / symbolInfos['lotStep']) * symbolInfos['lotStep']
+
         return volume
+
+
 
     def check_enterTrade_signal(self, data, balance, symbolInfos):
         df = pd.DataFrame(data)

@@ -142,6 +142,12 @@ class XTB:
             else:
                 candle["type"]="Bearish"
 
+            #divide by 10^digits
+            candle["open"] = candle["open"]/(10**result["returnData"]["digits"])
+            candle["close"] = candle["close"]/(10**result["returnData"]["digits"])
+            candle["high"] = candle["high"]/(10**result["returnData"]["digits"])
+            candle["low"] = candle["low"]/(10**result["returnData"]["digits"])
+
             candles.append(candle)
         if len(candles)==1:
             return False
@@ -581,3 +587,49 @@ class XTB:
         result = self.ws.recv()+"\n"
         result = json.loads(result)
         return result
+    
+class SimulationXTB:
+    def __init__(self, simulation_data_file):
+        # Load the simulation data from a JSON file
+        with open(simulation_data_file, 'r') as f:
+            self.simulation_data = json.load(f)
+        
+        # Initialize balance and other variables
+        self.balance = 10000  # Assuming a starting balance for the simulation
+        self.orders = []
+        self.trade_history = []
+
+    def get_Balance(self):
+        return self.balance
+
+    def get_AllSymbols(self):
+        # Extract and return the symbol info from the simulation data
+        all_symbols_info = [{'symbol': symbol, **self.simulation_data[symbol]['symbolInfos']} for symbol in self.simulation_data.keys()]
+        return {'returnData': all_symbols_info}
+
+    def get_Candles(self, period, symbol, qty_candles):
+        # Return the last qty_candles of candle data for the specified symbol
+        return self.simulation_data[symbol]['candles'][-qty_candles:]
+
+    def make_Trade(self, symbol, cmd, transaction_type, volume, order):
+        # Simulate making a trade by updating balance and storing the order
+        last_candle = self.simulation_data[symbol]['candles'][-1]
+        price = last_candle['close']
+        
+        if cmd == "buy":
+            cost = volume * price  # Example: cost = volume * last close price
+            self.balance -= cost
+        elif cmd == "sell":
+            gain = volume * price  # Example: gain = volume * last close price
+            self.balance += gain
+        
+        self.orders.append(order)
+        self.trade_history.append({
+            'symbol': symbol,
+            'cmd': cmd,
+            'transaction_type': transaction_type,
+            'volume': volume,
+            'order': order,
+            'price': price,
+            'balance_after_trade': self.balance
+        })
