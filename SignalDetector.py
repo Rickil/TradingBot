@@ -212,6 +212,11 @@ class SignalDetector:
             volume = (balance / lot_min_margin) * symbolInfos['lotMin']
             volume = max(min(volume, symbolInfos['lotMax']), symbolInfos['lotMin'])
             volume = round(volume / symbolInfos['lotStep']) * symbolInfos['lotStep']
+        
+        #check that required margin is less than balance
+        required_margin = volume * lot_min_margin / symbolInfos['lotMin']
+        if required_margin > balance:
+            return 0
 
         return volume
 
@@ -234,6 +239,8 @@ class SignalDetector:
 
         # Determine the volume for the trade
         volume = self.calculate_trade_volume(balance, symbolInfos)
+        if volume == 0:
+            return None
 
         # Buy Conditions
         if self.indicator.bullish_engulfing(data):
