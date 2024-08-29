@@ -14,7 +14,8 @@ xtb = XTB(base_url, userId, password)
 # Get all symbols
 symbols = xtb.get_AllSymbols()
 
-periods = ['M1', 'M5', 'M15', 'M30', 'H1']
+periods = ['H1']
+quantity_candles = 10000
 dataSample = {}
 currency_errors = []
 forex_currencies = [symbol['symbol'] for symbol in symbols['returnData'] if symbol['categoryName'] == 'FX']
@@ -27,10 +28,14 @@ for period in tqdm(periods, desc=f"Downloading {periods} periods"):
 
         #using a "try catch" to avoid errors with the API and add the currency to the currency_errors list if an error occurs
         try:
-            data["candles"] = xtb.get_Candles(period, currency, qty_candles=10000)[1:]
+            data["candles"] = xtb.get_Candles(period, currency, qty_candles=quantity_candles)[1:]
         except:
             currency_errors.append(currency)
-        dataSample[currency] = data
+        else:
+            dataSample[currency] = data
+
+    #add the quantity of candles to the dataSample
+    dataSample["quantity_candles"] = quantity_candles
 
     #save data to a json file in samples folder
     with open(f"samples/forex_{period}.json", 'w') as f:

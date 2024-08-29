@@ -186,7 +186,7 @@ class SignalDetector:
     def __init__(self):
         self.indicator = Indicator()
 
-    def calculate_trade_volume(balance, symbolInfos, risk_percentage=1):
+    def calculate_trade_volume(self, balance, symbolInfos, risk_percentage=1):
         """
         Calculate the trade volume based on the balance, leverage, and risk management.
         The balance is in EUR, and we use the lotMinMargin field from symbolInfos.
@@ -339,7 +339,7 @@ class SignalDetector:
 
         return None
 
-    def check_exitTrade_signal(self, data, order):
+    def check_closeTrade_signal(self, data, order):
         df = pd.DataFrame(data)
 
         # Calculate indicators

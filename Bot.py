@@ -1,6 +1,7 @@
 from SignalDetector import SignalDetector
 from Order import Order
-from API import XTB, SimulationXTB
+from Simulation import SimulationXTB
+from API import XTB
 
 class Bot:
 
@@ -44,10 +45,13 @@ class Bot:
             self.symbolInfos[symbol] = symbolInfos
             self.orders[symbol] = []
 
-        print(f"Bot {self.name} is ready")
+        print(f"Bot {self.name} is ready !")
 
     def updateData(self):
-        self.allSymbolsInfos = self.xtb.get_AllSymbols()
+        self.allSymbolsInfos = self.xtb.get_AllSymbols()['returnData']
+        if self.allSymbolsInfos is None:
+            return False
+        
         for symbolInfos in self.allSymbolsInfos:
             symbol = symbolInfos['symbol']
             lotMinMargin = self.xtb.get_Margin(symbol, symbolInfos['lotMin'])
@@ -55,17 +59,24 @@ class Bot:
             symbol_data = self.xtb.get_Candles(period=self.period, symbol=symbol, qty_candles=self.qty_candles)[1:]
             self.data[symbol] = symbol_data
             self.symbolInfos[symbol] = symbolInfos
+
+        return True
     
     def run(self):
-        while True:
-            self.updateData()
+        while self.updateData():
             for symbol in list(self.symbolInfos.keys()):
                 # Check if we have to close orders
-                for order in self.orders[symbol]:
+                '''for order in self.orders[symbol]:
                     signal = self.signal_detector.check_closeTrade_signal(self.data[symbol], order)
                     if signal:
-                        self.xtb.make_Trade(symbol=symbol, cmd=signal.cmd, transaction_type=signal.type, volume=signal.volume, order=order.id)
-                        self.orders[symbol].remove(order)
+                        self.xtb.make_Trade(
+                            symbol=symbol, 
+                            cmd=signal.cmd, 
+                            transaction_type=signal.type, 
+                            volume=signal.volume, 
+                            order=order.id
+                        )
+                        self.orders[symbol].remove(order)'''
             
             # Update balance after closed trades
             self.balance = self.xtb.get_Balance()
@@ -74,8 +85,25 @@ class Bot:
                 # Check if we have to open orders
                 signal = self.signal_detector.check_enterTrade_signal(self.data[symbol], self.balance, self.symbolInfos[symbol])
                 if signal:
-                    order = Order(symbol=symbol, type=signal.type, volume=signal.volume)
-                    self.orders[symbol].append(order)
-                    self.xtb.make_Trade(symbol=symbol, cmd=signal.cmd, transaction_type=signal.type, volume=signal.volume, order=order.id)
-                    # Update balance after a trade is made
-                    self.balance = self.xtb.get_Balance()
+                    # Calculate the required margin for this trade
+                    required_margin = self.xtb.get_Margin(symbol, signal.volume)
+                    
+                    # Check if there is enough balance to open the trade
+                    if self.balance >= required_margin:
+                        order = Order(symbol=symbol, type=signal.type, volume=signal.volume)
+                        self.orders[symbol].append(order)
+                        self.xtb.make_Trade(
+                            symbol=symbol, 
+                            cmd=signal.cmd, 
+                            transaction_type=signal.type, 
+                            volume=signal.volume, 
+                            order=order.id
+                        )
+                        # Update balance after a trade is made
+                        self.balance = self.xtb.get_Balance()
+                    else:
+                        print(f"Insufficient balance to open trade for {symbol}. Required margin: {required_margin}, Available balance: {self.balance}")
+
+        # Update the simulation window and check for the end of data (if in simulation mode)
+        if self.simulation:
+            print(f"Simulation ended. Performance metrics: {self.xtb.get_performance_metrics()}")
