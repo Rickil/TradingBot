@@ -112,4 +112,4 @@ class Bot:
 
         # Update the simulation window and check for the end of data (if in simulation mode)
         if self.simulation:
-            print(f"Simulation ended. Performance metrics: {self.xtb.get_performance_metrics()}")
+            self.xtb.print_performance_metrics()

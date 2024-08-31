@@ -11,6 +11,7 @@ class SimulationXTB:
             self.quantity_candles = self.simulation_data["quantity_candles"]
         
         # Initialize balance and other variables
+        self.comission = 0.008
         self.initial_balance = 10000
         self.balance = self.initial_balance
         self.orders = {}
@@ -73,7 +74,7 @@ class SimulationXTB:
         if transaction_type == SIGNAL_TYPE.OPEN:
             # Calculate the required margin using the provided margin calculation method
             required_margin = self.get_Margin(symbol, volume)
-            self.balance -= required_margin
+            self.balance -= required_margin + self.comission*required_margin  # Deduct the required margin and commission
             
             # Create a new order with entry price
             order_id = len(self.orders) + 1
@@ -83,7 +84,9 @@ class SimulationXTB:
                 'cmd': cmd,
                 'entry_price': price,
                 'required_margin': required_margin,  # Store the margin used
-                'success': False
+                'success': False,
+                'profit': 0,
+                'closed': False
             }
 
         elif transaction_type == SIGNAL_TYPE.CLOSE:
@@ -103,29 +106,59 @@ class SimulationXTB:
                 # Update balance based on the profit or loss and refund the initial margin
                 self.balance += profit_or_loss * initial_margin + initial_margin
 
-                #print "window_size" last prices of candles on open
-                #print(f"{symbol} window_size last prices of candles on open: {self.simulation_data[symbol]['candles'][self.current_index + self.window_size - 1]}")
-
-                #print price and entry price
-                #print(f"Price: {price}, Entry Price: {entry_price}")
-                #print(f"Order {order} closed with a profit/loss of {profit_or_loss}")
-
                 if profit_or_loss > 0:
                     self.orders[order]["success"] = True
 
+                self.orders[order]["profit"] = profit_or_loss*initial_margin
+                self.orders[order]["closed"] = True
+
     def get_performance_metrics(self):
-        total_trades = len(list(self.orders.keys()))
-        winning_trades = sum([1 for order in self.orders.values() if order["success"]])
-        losing_trades = total_trades - winning_trades
+
+        total_trades = len(self.orders)
+        self.orders = {k: v for k, v in self.orders.items() if v["closed"]} #remove ongoing trades
+        ongoing_trades = total_trades - len(self.orders)
+        winning_trades = [order for order in self.orders.values() if order["success"]]
+        losing_trades = [order for order in self.orders.values() if not order["success"]]
+        
+        num_winning_trades = len(winning_trades)
+        num_losing_trades = len(losing_trades)
+        
         final_balance = self.balance
         profit_or_loss = final_balance - self.initial_balance
         
+        # Calculate the percentage of successful trades
+        success_percentage = (num_winning_trades / total_trades) * 100 if total_trades > 0 else 0
+        
+        # Calculate average profit and average loss
+        average_profit = sum(order["profit"] for order in winning_trades) / num_winning_trades if num_winning_trades > 0 else 0
+        average_loss = sum(order["profit"] for order in losing_trades) / num_losing_trades if num_losing_trades > 0 else 0
+        
         metrics = {
             "Total Trades": total_trades,
-            "Winning Trades": winning_trades,
-            "Losing Trades": losing_trades,
+            "Ongoing Trades": ongoing_trades,
+            "Winning Trades": num_winning_trades,
+            "Losing Trades": num_losing_trades,
+            "Success Percentage": success_percentage,
+            "Average Profit": average_profit,
+            "Average Loss": average_loss,
             "Final Balance": final_balance,
             "Profit/Loss": profit_or_loss
         }
         
         return metrics
+    
+    def print_performance_metrics(self):
+        metrics = self.get_performance_metrics()
+
+        print("----- Trading Performance Metrics -----")
+        print(f"Total Trades:        {metrics['Total Trades']}")
+        print(f"Ongoing Trades:      {metrics['Ongoing Trades']}")
+        print(f"Winning Trades:      {metrics['Winning Trades']}")
+        print(f"Losing Trades:       {metrics['Losing Trades']}")
+        print(f"Success Percentage:  {metrics['Success Percentage']:.2f}%")
+        print(f"Average Profit:      €{metrics['Average Profit']:.2f}")
+        print(f"Average Loss:        €{metrics['Average Loss']:.2f}")
+        print(f"Final Balance:       €{metrics['Final Balance']:.2f}")
+        print(f"Profit/Loss:         €{metrics['Profit/Loss']:.2f}")
+        print("---------------------------------------")
+
