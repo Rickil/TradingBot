@@ -355,7 +355,7 @@ class SignalDetector:
         long_ma = self.indicator.calculate_moving_average(df, period=200)
         atr = self.indicator.calculate_atr(df, period=14)
 
-        current_price = df['close'].iloc[-1]
+        current_price = df['open'].iloc[-1]
 
         # Exit conditions for buy signals
         if order.type == ORDER_TYPE.BUY:
@@ -399,7 +399,7 @@ class SignalDetector:
                 
 
             # ATR-Based Exit (Trailing Stop)
-            if self.entry_price and current_price < self.entry_price - 2 * atr.iloc[-1]:
+            if order.entry_price and current_price < order.entry_price - 2 * atr.iloc[-1]:
                 return Signal(order.type,  SIGNAL_TYPE.CLOSE, order.volume)
                 
 
@@ -451,7 +451,7 @@ class SignalDetector:
                 
 
             # ATR-Based Exit (Trailing Stop)
-            if self.entry_price and current_price > self.entry_price + 2 * atr.iloc[-1]:
+            if order.entry_price and current_price > order.entry_price + 2 * atr.iloc[-1]:
                 return Signal(order.type,  SIGNAL_TYPE.CLOSE, order.volume)
                 
 

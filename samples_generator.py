@@ -14,7 +14,7 @@ xtb = XTB(base_url, userId, password)
 # Get all symbols
 symbols = xtb.get_AllSymbols()
 
-periods = ['H1']
+periods = ['M30', 'M15', 'M5']
 quantity_candles = 10000
 dataSample = {}
 currency_errors = []

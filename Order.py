@@ -9,10 +9,11 @@ class Order:
 
     id_iterator = 0
 
-    def __init__(self, symbol, type, volume):
+    def __init__(self, symbol, type, entry_price, volume):
         self.id = Order.id_iterator
         self.symbol = symbol
         self.type = type
+        self.entry_price = entry_price
         self.volume = volume
         self.open_time = datetime.now()
 

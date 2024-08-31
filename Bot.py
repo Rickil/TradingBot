@@ -6,7 +6,7 @@ from datetime import datetime
 
 class Bot:
 
-    def __init__(self, name, url, userId, password, period="H1", qty_candles=500, simulation=False, simulation_data_file=None):
+    def __init__(self, name, url, userId, password, period="H1", qty_candles=500, simulation=False, simulation_data_file=None, window_size=20, sample_size=120, initial_balance=10000):
         self.name = name
         self.period = period
         self.qty_candles = qty_candles
@@ -16,7 +16,7 @@ class Bot:
             # Initialize with SimulationXTB if simulation mode is enabled
             if simulation_data_file is None:
                 raise ValueError("simulation_data_file must be provided when simulation mode is enabled")
-            self.xtb = SimulationXTB(simulation_data_file)
+            self.xtb = SimulationXTB(simulation_data_file, window_size=window_size, sample_size=sample_size, initial_balance=initial_balance)
         else:
             # Initialize with real XTB API if not in simulation mode
             self.xtb = XTB(url, userId, password)
@@ -95,7 +95,7 @@ class Bot:
                     
                     # Check if there is enough balance to open the trade
                     if self.balance >= required_margin:
-                        order = Order(symbol=symbol, type=signal.cmd, volume=signal.volume)
+                        order = Order(symbol=symbol, type=signal.cmd, entry_price=self.data[symbol][-1]['open'], volume=signal.volume)
                         self.orders[symbol].append(order)
                         self.nb_orders += 1
                         self.xtb.make_Trade(

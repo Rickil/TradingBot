@@ -4,7 +4,7 @@ from Order import ORDER_TYPE
 from datetime import datetime
 
 class SimulationXTB:
-    def __init__(self, simulation_data_file, window_size=20, sample_size=500):
+    def __init__(self, simulation_data_file, window_size=20, sample_size=500, initial_balance=10000):
         # Load the simulation data from a JSON file
         with open(simulation_data_file, 'r') as f:
             self.simulation_data = json.load(f)
@@ -12,7 +12,7 @@ class SimulationXTB:
         
         # Initialize balance and other variables
         self.comission = 0.008
-        self.initial_balance = 10000
+        self.initial_balance = initial_balance
         self.balance = self.initial_balance
         self.orders = {}
         self.window_size = window_size
@@ -31,12 +31,12 @@ class SimulationXTB:
     def get_AllSymbols(self):
         self.updateSimulationState()
 
-        if self.current_index + self.window_size > self.sample_size:
+        if self.current_index + self.window_size > (self.sample_size-self.window_size):
             return None  # Indicating the end of the data
         
         #print the progression every 5% of the data
-        if self.current_index % (self.sample_size // 20) == 0:
-            print(f"Progress: {self.current_index / self.sample_size * 100:.2f}%")
+        if self.current_index % ((self.sample_size-self.window_size) // 20) == 0:
+            print(f"Progress: {self.current_index / (self.sample_size-self.window_size) * 100:.2f}%")
             
         # Extract and return the symbol info from the simulation data
         symbols = list(self.simulation_data.keys())
@@ -74,7 +74,7 @@ class SimulationXTB:
         if transaction_type == SIGNAL_TYPE.OPEN:
             # Calculate the required margin using the provided margin calculation method
             required_margin = self.get_Margin(symbol, volume)
-            self.balance -= required_margin + self.comission*required_margin  # Deduct the required margin and commission
+            self.balance -= required_margin  # Deduct the required margin and commission
             
             # Create a new order with entry price
             order_id = len(self.orders) + 1
@@ -124,7 +124,8 @@ class SimulationXTB:
         num_losing_trades = len(losing_trades)
         
         final_balance = self.balance
-        profit_or_loss = final_balance - self.initial_balance
+        #sum of every tardes profit or loss
+        profit_or_loss = sum(order["profit"] for order in self.orders.values())
         
         # Calculate the percentage of successful trades
         success_percentage = (num_winning_trades / total_trades) * 100 if total_trades > 0 else 0
