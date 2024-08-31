@@ -2,6 +2,7 @@ from SignalDetector import SignalDetector
 from Order import Order
 from Simulation import SimulationXTB
 from API import XTB
+from datetime import datetime
 
 class Bot:
 
@@ -25,6 +26,7 @@ class Bot:
 
         # Initialize orders
         self.orders = {}
+        self.nb_orders = 0
 
         # Initialize signal detector
         self.signal_detector = SignalDetector()
@@ -48,10 +50,12 @@ class Bot:
         print(f"Bot {self.name} is ready !")
 
     def updateData(self):
-        self.allSymbolsInfos = self.xtb.get_AllSymbols()['returnData']
-        if self.allSymbolsInfos is None:
+        #print(self.nb_orders)
+        allSymbolsInfos = self.xtb.get_AllSymbols()
+        if allSymbolsInfos is None:
             return False
         
+        self.allSymbolsInfos = allSymbolsInfos['returnData']
         for symbolInfos in self.allSymbolsInfos:
             symbol = symbolInfos['symbol']
             lotMinMargin = self.xtb.get_Margin(symbol, symbolInfos['lotMin'])
@@ -66,7 +70,7 @@ class Bot:
         while self.updateData():
             for symbol in list(self.symbolInfos.keys()):
                 # Check if we have to close orders
-                '''for order in self.orders[symbol]:
+                for order in self.orders[symbol]:
                     signal = self.signal_detector.check_closeTrade_signal(self.data[symbol], order)
                     if signal:
                         self.xtb.make_Trade(
@@ -76,7 +80,8 @@ class Bot:
                             volume=signal.volume, 
                             order=order.id
                         )
-                        self.orders[symbol].remove(order)'''
+                        self.orders[symbol].remove(order)
+                        self.nb_orders -= 1
             
             # Update balance after closed trades
             self.balance = self.xtb.get_Balance()
@@ -90,8 +95,9 @@ class Bot:
                     
                     # Check if there is enough balance to open the trade
                     if self.balance >= required_margin:
-                        order = Order(symbol=symbol, type=signal.type, volume=signal.volume)
+                        order = Order(symbol=symbol, type=signal.cmd, volume=signal.volume)
                         self.orders[symbol].append(order)
+                        self.nb_orders += 1
                         self.xtb.make_Trade(
                             symbol=symbol, 
                             cmd=signal.cmd, 

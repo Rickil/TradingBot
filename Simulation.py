@@ -1,42 +1,46 @@
 import json
 from SignalDetector import SIGNAL_TYPE
+from Order import ORDER_TYPE
 from datetime import datetime
 
 class SimulationXTB:
-    def __init__(self, simulation_data_file, window_size=20):
+    def __init__(self, simulation_data_file, window_size=20, sample_size=500):
         # Load the simulation data from a JSON file
         with open(simulation_data_file, 'r') as f:
             self.simulation_data = json.load(f)
             self.quantity_candles = self.simulation_data["quantity_candles"]
         
         # Initialize balance and other variables
-        self.balance = 10000  # Assuming a starting balance for the simulation
+        self.initial_balance = 10000
+        self.balance = self.initial_balance
         self.orders = {}
-        self.trade_history = []
         self.window_size = window_size
         self.current_index = 0  # Index to track the sliding window position
-        self.last_update_time = datetime.now()
+        self.sample_size = min(sample_size, self.quantity_candles)
 
     def get_Balance(self):
         return self.balance
-
-    def get_AllSymbols(self):
-        # print the time elapsed since the last update
-        current_time = datetime.now()
-        time_elapsed = current_time - self.last_update_time
-        print(f"Time elapsed since last update: {time_elapsed}")
-        self.last_update_time = current_time
+    
+    def updateSimulationState(self):
         # Slide the window by one
         self.current_index += 1
-        if self.current_index + self.window_size > self.quantity_candles:
+
+
+
+    def get_AllSymbols(self):
+        self.updateSimulationState()
+
+        if self.current_index + self.window_size > self.sample_size:
             return None  # Indicating the end of the data
         
-        #print current index every 5% of the data
-        if self.current_index % (self.quantity_candles // 20) == 0:
-            print(f"Current index: {self.current_index}")
+        #print the progression every 5% of the data
+        if self.current_index % (self.sample_size // 20) == 0:
+            print(f"Progress: {self.current_index / self.sample_size * 100:.2f}%")
+            
         # Extract and return the symbol info from the simulation data
         symbols = list(self.simulation_data.keys())
         symbols.pop()
+        symbols = symbols[:20]  # Limit to the first 2 symbols for demonstration
         all_symbols_info = [self.simulation_data[symbol]['symbolInfos'] for symbol in symbols]
         return {'returnData': all_symbols_info}
 
@@ -78,43 +82,43 @@ class SimulationXTB:
                 'volume': volume,
                 'cmd': cmd,
                 'entry_price': price,
-                'required_margin': required_margin  # Store the margin used
+                'required_margin': required_margin,  # Store the margin used
+                'success': False
             }
 
         elif transaction_type == SIGNAL_TYPE.CLOSE:
             if order in self.orders:
+                price = self.simulation_data[self.orders[order]['symbol']]['candles'][self.current_index + self.window_size - 1]['open']
                 original_order = self.orders[order]
                 entry_price = original_order['entry_price']
                 initial_margin = original_order['required_margin']
                 
                 # Calculate profit or loss
-                if original_order['cmd'] == "buy":  # Closing a buy order
-                    profit_or_loss = (price - entry_price) * volume
-                elif original_order['cmd'] == "sell":  # Closing a sell order
-                    profit_or_loss = (entry_price - price) * volume
+                profit_or_loss = 0
+                if original_order['cmd'] == ORDER_TYPE.BUY:  # Closing a buy order
+                    profit_or_loss = (price - entry_price)
+                elif original_order['cmd'] == ORDER_TYPE.SELL:  # Closing a sell order
+                    profit_or_loss = (entry_price - price)
                 
                 # Update balance based on the profit or loss and refund the initial margin
-                self.balance += profit_or_loss + initial_margin
+                self.balance += profit_or_loss * initial_margin + initial_margin
 
-                # Remove the closed order
-                del self.orders[order]
-        
-        self.trade_history.append({
-            'symbol': symbol,
-            'cmd': cmd,
-            'transaction_type': transaction_type,
-            'volume': volume,
-            'order': order,
-            'price': price,
-            'balance_after_trade': self.balance
-        })
+                #print "window_size" last prices of candles on open
+                #print(f"{symbol} window_size last prices of candles on open: {self.simulation_data[symbol]['candles'][self.current_index + self.window_size - 1]}")
+
+                #print price and entry price
+                #print(f"Price: {price}, Entry Price: {entry_price}")
+                #print(f"Order {order} closed with a profit/loss of {profit_or_loss}")
+
+                if profit_or_loss > 0:
+                    self.orders[order]["success"] = True
 
     def get_performance_metrics(self):
-        total_trades = len(self.trade_history)
-        winning_trades = len([trade for trade in self.trade_history if trade['balance_after_trade'] > self.balance])
+        total_trades = len(list(self.orders.keys()))
+        winning_trades = sum([1 for order in self.orders.values() if order["success"]])
         losing_trades = total_trades - winning_trades
         final_balance = self.balance
-        profit_or_loss = final_balance - 10000  # Assuming starting balance was 10000
+        profit_or_loss = final_balance - self.initial_balance
         
         metrics = {
             "Total Trades": total_trades,
